@@ -19,6 +19,7 @@ export default class Server {
     this.chainId = chainId;
   }
   async bootstrap() {
+    console.log('Starting server.');
     this.client = createPublicClient({
       chain: chains[this.chainId],
       transport: webSocket()
@@ -38,8 +39,10 @@ export default class Server {
       return 0;
     }
     this.startCatchupIndexer();
+    console.log(`Server with chainId ${this.chainId} bootstrapped.`);
   }
   async startCatchupIndexer() {
+    console.log(`Starting catch-up indexer ${this.chainId}.`);
     const latestBlockNumber = (await this.client?.getBlockNumber()) || BigInt(0);
     let currentBlockNumber = BigInt(this.chain.blockNumber);
     while (currentBlockNumber <= latestBlockNumber) {
@@ -56,6 +59,7 @@ export default class Server {
           });
           for (let j = 0; j < logs.length; j++) {
             const log = logs[i];
+            console.log('log :>> ', log);
           }
         }
         this.chain.blockNumber = currentBlockNumber.toString();

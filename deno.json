@@ -1,0 +1,11 @@
+{
+  "imports": {
+    "std/": "https://deno.land/std@0.204.0/",
+    "x/": "https://deno.land/x/"
+  },
+  "nodeModulesDir": true,
+  "tasks": {
+    "dev": "deno run --allow-all --watch main.ts",
+    "run": "deno run --allow-all main.ts"
+  }
+}

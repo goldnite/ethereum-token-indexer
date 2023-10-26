@@ -18,31 +18,31 @@ export enum TokenType {
   ERC1155
 }
 
-export interface Chain {
+export interface ChainSchema {
   _id: ObjectId;
   chainId: number;
   blockNumber: string;
   currency: string;
 }
 
-export interface Address {
+export interface AddressSchema {
   _id: ObjectId;
   hash: string;
-  chain: Chain;
+  chain: ChainSchema;
   balances: Balance[]
 }
 
 export interface Balance {
-  token: Token;
+  token: TokenSchema;
   tokenType: TokenType;
   amount: string;
   tokenId: string;
 }
 
-export interface Token {
+export interface TokenSchema {
   _id: ObjectId;
   type: TokenType;
-  address: Address;
+  address: AddressSchema;
   decimals: number;
   holders: string;
   name: string;
@@ -50,6 +50,6 @@ export interface Token {
   totalSupply: string;
 }
 
-export const chain = db.collection<Chain>("chains");
-export const address = db.collection<Address>("addresses");
-export const token = db.collection<Token>("tokens");
+export const chainModel = db.collection<ChainSchema>("chains");
+export const addressModel = db.collection<AddressSchema>("addresses");
+export const tokenModel = db.collection<TokenSchema>("tokens");

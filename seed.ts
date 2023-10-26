@@ -1,7 +1,7 @@
 
-import { chain, address, token } from './db.ts';
+import { chainModel, addressModel, tokenModel } from './db.ts';
 
-const chainIds = await chain.insertMany([
+const chainIds = await chainModel.insertMany([
   {
     chainId: 813,
     blockNumber: '0',

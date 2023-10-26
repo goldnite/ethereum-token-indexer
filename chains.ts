@@ -11,11 +11,11 @@ export const qitmeer = defineChain({
   },
   rpcUrls: {
     default: {
-      http: ['https://qng.rpc.qitmeer.io'],
-      webSocket: ['wss://qng.rpc.qitmeer.io'],
+      http: ['https://https://rpc.woowow.io'],
+      webSocket: ['wss://rpc.woowow.io'],
     },
     public: {
-      http: ['https://mainnet.meerlabs.com', 'https://rpc.dimai.ai', 'https://https://rpc.woowow.io'],
+      http: ['https://qng.rpc.qitmeer.io', 'https://mainnet.meerlabs.com', 'https://rpc.dimai.ai', 'https://https://rpc.woowow.io'],
       webSocket: ['wss://mainnet.meerlabs.com', 'wss://rpc.dimai.ai', 'wss://https://rpc.woowow.io'],
     },
   },

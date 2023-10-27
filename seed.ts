@@ -1,10 +1,12 @@
 
-import { chainModel, addressModel, tokenModel } from './db.ts';
+import { ChainModel, AddressModel, TokenModel } from './db.ts';
+import { chains } from "./chains.ts";
 
-const chainIds = await chainModel.insertMany([
-  {
-    chainId: 813,
+const chainIds = await ChainModel.insertMany(
+  Object.keys(chains).map((key) => ({
+    chainId: Number(chains[key].id),
     blockNumber: '0',
-    currency: 'MEER',
-  },
-]);
+    currency: chains[key].nativeCurrency.symbol,
+  }))
+);
+Deno.exit(0);

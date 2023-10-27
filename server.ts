@@ -12,16 +12,13 @@ import ERC721Abi from './abis/ERC721.abi.json' with { type: "json" };
 import ERC1155Abi from './abis/ERC1155.abi.json' with { type: "json" };
 import { chains } from './chains.ts';
 import {
-  chainModel,
-  addressModel,
-  tokenModel,
-  type ChainSchema,
-  type AddressSchema,
-  type TokenSchema,
-  TokenType
+  ChainModel,
+  AddressModel,
+  TokenModel,
 } from './db.ts';
 
 export const ERC721_interfaceId = '0x80ac58cd';
+export const ERC1155_interfaceId = '0xd9b67a26';
 
 export const erc20AndErc721TokenTransferFirstTopic =
   '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
@@ -37,7 +34,8 @@ export function topicToAddress(topic: `0x${string}`): Address {
 export default class Server {
   chainId: number;
   client!: PublicClient;
-  chain!: ChainSchema;
+  chain!: any;
+
 
   constructor(chainId: number = 1) {
     this.chainId = chainId;
@@ -52,16 +50,7 @@ export default class Server {
       console.error('Failed to initialize client.');
       return 0;
     }
-    this.chain = (await chainModel.findOne({ chainId: this.chainId })) ||
-      (await chainModel.insertOne({
-        chainId: this.chainId,
-        blockNumber: '0',
-        currency: chains[this.chainId].nativeCurrency.symbol,
-      }) as ChainSchema);
-    if (!this.chain) {
-      console.log('Failed to load database.');
-      return 0;
-    }
+    this.chain = await ChainModel.findOne({ chainId: this.chainId });
     this.startCatchupIndexer();
     console.log(`Server with chainId ${this.chainId} bootstrapped.`);
   }
@@ -70,106 +59,156 @@ export default class Server {
     const latestBlockNumber = (await this.client?.getBlockNumber()) || BigInt(0);
     console.log('latestBlockNumber :>> ', latestBlockNumber);
     let currentBlockNumber = BigInt(this.chain.blockNumber);
-    currentBlockNumber = 991353n;
+    currentBlockNumber = 541759n;
     while (currentBlockNumber <= latestBlockNumber) {
       console.log(`Processing block ${currentBlockNumber}`);
-      try {
-        const block = await this.client.getBlock({ blockNumber: currentBlockNumber, includeTransactions: true });
-        for (let i = 0; i < block.transactions.length; i++) {
-          const tx = block.transactions[i];
-          const txReceipt = await this.client.getTransactionReceipt({ hash: tx.hash });
-          const logs = txReceipt.logs.filter((log) =>
-            log.topics[0] === erc20AndErc721TokenTransferFirstTopic &&
-            log.topics[1] &&
-            log.topics[2] &&
-            !log.topics[3]
-          );
-          for (let j = 0; j < logs.length; j++) {
-            const log = logs[j];
-            const from = await this.upsertAddress(topicToAddress(log.topics[1]!));
-            const to = await this.upsertAddress(topicToAddress(log.topics[2]!));
-            const tokenAddress = await this.upsertAddress(log.address);
-            const token = await this.upsertToken(tokenAddress);
-            let data;
-            try {
-              data = await this.client.readContract({
-                address: tokenAddress.hash as Address,
-                abi: ERC721Abi,
-                args: [ERC721_interfaceId],
-                functionName: 'supportsInterface',
-              })
+      // try {
+      const block = await this.client.getBlock({ blockNumber: currentBlockNumber, includeTransactions: true });
+      for (let i = 0; i < block.transactions.length; i++) {
+        const tx = block.transactions[i];
+        const txReceipt = await this.client.getTransactionReceipt({ hash: tx.hash });
+        const logs = txReceipt.logs.filter((log) =>
+          log.topics[0] === erc20AndErc721TokenTransferFirstTopic &&
+          log.topics[1] &&
+          log.topics[2] &&
+          !log.topics[3]
+        );
+        for (let j = 0; j < logs.length; j++) {
+          const log = logs[j];
+          const from = await this.upsertAddress(topicToAddress(log.topics[1]!));
+          const to = await this.upsertAddress(topicToAddress(log.topics[2]!));
+          const tokenAddress = await this.upsertAddress(log.address);
+          const data = await this.client.multicall({
+            contracts: [{
+              address: tokenAddress.hash as Address,
+              abi: ERC721Abi as Abi,
+              args: [ERC721_interfaceId],
+              functionName: 'supportsInterface',
+            }, {
+              address: tokenAddress.hash as Address,
+              abi: ERC1155Abi as Abi,
+              args: [ERC1155_interfaceId],
+              functionName: 'supportsInterface',
+            }]
+          });
+          if (data[0].status == 'failure' && data[1].status == "failure") {
+            // TODO: have to handle WETH
+            /*
+            const token = await this.upsertToken(tokenAddress, "ERC20");
+            const amount = BigInt(log.topics[2]!);
+            const changeBalance = async (address: any, token: any, amount: bigint, isIncrease: boolean) => {
+              const index = address.balances.findIndex((balance: any) => balance.token.address.hash == token.address.hash);
+              console.log('index :>> ', index);
+              if (isIncrease) {
+                if (index >= 0) address.balances[index].amount = (BigInt(address.balances[index].amount) + amount).toString();
+                else address.balances.push({ token, amount: amount.toString() });
+              }
+              else {
+                address.balances[index].amount = (BigInt(address.balances[index].amount) + amount).toString();
+                if (address.balances[index].amount == "0") address.balances.splice(index, 1);
+              }
+              await address.save();
+              await token.save();
             }
-            catch (err) {
-              console.log('not ERC721');
+            console.log('from :>> ', from);
+            console.log('to :>> ', to);
+            console.log('amount :>> ', amount);
+            console.log('token.symbol :>> ', token.symbol);
+            if (from.hash == zeroAddress) {
+              changeBalance(to, token, amount, true);
+              token.totalSupply = (BigInt(token.totalSupply!) + amount).toString();
             }
-            if (data == undefined) // ERC20
-            {
-              this.upsertToken(tokenAddress);
-              // if (from.hash == zeroAddress) {
-              //   addressModel.updateOne(
-              //     { _id: tokenAddress.id },
-              //     { $set: { username: "USERNAME" } },
-              //   );
-              // }
+            else if (to.hash == zeroAddress) {
+              await changeBalance(from, token, amount, false);
+              token.totalSupply = (BigInt(token.totalSupply!) - amount).toString();
             }
+            else {
+              await changeBalance(from, token, amount, false);
+              await changeBalance(to, token, amount, true);
+            }
+            await token.save();*/
+          }
+          else if (data[0].result == true) {  // ERC721
+            const token = await this.upsertToken(tokenAddress, "ERC721");
+            const tokenId = BigInt(log.topics[2]!).toString();
+            if (from.hash == zeroAddress) {
+              from.balances.push({ token, tokenId });
+              token.totalSupply = (BigInt(token.totalSupply!) + 1n).toString();
+            }
+            else if (to.hash == zeroAddress) {
+              const index = to.balances.findIndex((balance: any) => balance.token.address.hash == token.address.hash && balance.tokenId == tokenId);
+              to.balances.splice(index, 1);
+              token.totalSupply = (BigInt(token.totalSupply!) - 1n).toString();
+            } else {
+              const index = from.balances.findIndex((balance: any) => balance.token.address.hash == token.address.hash && balance.tokenId == tokenId);
+              from.balances.splice(index, 1);
+              to.balances.push({ token, tokenId });
+            }
+            await from.save();
+            await to.save();
+            await token.save()
+          }
+          else if (data[1].result == true) {  // ERC1155
           }
         }
-        console.log(`Processing block ${currentBlockNumber}`);
-        return;
-        this.chain.blockNumber = currentBlockNumber.toString();
-        // currentBlockNumber++;
-      } catch (error) {
-        console.error(`Error fetching block ${currentBlockNumber}: ${error.message}`);
-        continue;
+
       }
+      console.log(`Processed block ${currentBlockNumber}`);
+      this.chain.blockNumber = currentBlockNumber.toString();
+      await this.chain.save();
+      currentBlockNumber++;
+      // } catch (error) {
+      //   console.error(`Error fetching block ${currentBlockNumber}: ${error.message}`);
+      //   continue;
+      // }
     }
   }
   async upsertAddress(hash: Address) {
-    console.log('hash :>> ', hash);
-    let address = await addressModel.findOne({ hash });
+    let address = await AddressModel.findOne({ hash }).populate({
+      path: 'chain'
+    }).populate({
+      path: 'balances',
+      populate: {
+        path: 'token',
+        populate: 'address'
+      }
+    }).exec();
     if (!address) {
-      const id = await addressModel.insertOne({
+      address = new AddressModel({
         hash,
-        chain: this.chain._id,
+        chain: this.chain,
         balances: []
       });
-      address = await addressModel.findOne({ _id: id });
+      await address.save();
     }
-    return address as AddressSchema;
+    return address;
   }
-  async upsertToken(tokenAddress: AddressSchema) {
-    let token = await tokenModel.findOne({ address: tokenAddress });
-    console.log(tokenAddress);
-    const metadata = await this.client.multicall({
-      contracts: [
-        {
-          address: tokenAddress.hash as Address,
-          abi: ERC20Abi as Abi,
-          functionName: 'decimals',
-        }, {
-          address: tokenAddress.hash as Address,
-          abi: ERC20Abi as Abi,
-          functionName: 'name',
-        }, {
-          address: tokenAddress.hash as Address,
-          abi: ERC20Abi as Abi,
-          functionName: 'symbol',
-        }
-      ]
-    })
-    console.log(metadata);
+  async upsertToken(tokenAddress: any, tokenType: string) {
+    let token = await TokenModel.findOne({ address: tokenAddress }).populate("address").exec();
     if (!token) {
-      const id = await tokenModel.insertOne({
-        type: TokenType.ERC20,
-        address: tokenAddress._id,
-        decimals: Number(metadata[0].result),
+      const metadata = await this.client.multicall({
+        contracts: [
+          {
+            address: tokenAddress.hash as Address,
+            abi: ERC20Abi as Abi,
+            functionName: 'name',
+          }, {
+            address: tokenAddress.hash as Address,
+            abi: ERC20Abi as Abi,
+            functionName: 'symbol',
+          }
+        ]
+      })
+      token = new TokenModel({
+        type: tokenType,
+        address: tokenAddress,
         holders: "0",
-        name: String(metadata[1].result!),
-        symbol: String(metadata[2].result!),
+        name: String(metadata[0].result!),
+        symbol: String(metadata[1].result!),
         totalSupply: "0"
       });
-      token = await tokenModel.findOne({ _id: id });
+      await token.save();
     }
-    return token as TokenSchema;
+    return token;
   }
 }

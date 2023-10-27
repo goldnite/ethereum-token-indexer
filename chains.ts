@@ -30,6 +30,6 @@ export const qitmeer = defineChain({
     },
   },
 })
-export const chains: Record<number, any> = {
-  813: qitmeer,
+export const chains: Record<string, any> = {
+  "813": qitmeer,
 };

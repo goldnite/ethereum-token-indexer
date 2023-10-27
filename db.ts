@@ -9,6 +9,7 @@ export const ChainSchema = new Schema({
   chainId: { type: Number, unique: true },
   blockNumber: String,
   currency: String,
+  wrappedNativeCurrencies: [String]
 });
 
 export const AddressSchema = new Schema({

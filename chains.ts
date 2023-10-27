@@ -9,6 +9,9 @@ export const qitmeer = defineChain({
     name: 'MEER',
     symbol: 'MEER',
   },
+  wrappedNativeCurrencies: [
+    '0x470cbfb236860eb5257bbf78715fb5bd77119c2f'
+  ],
   rpcUrls: {
     default: {
       http: ['https://https://rpc.woowow.io'],

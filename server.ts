@@ -1,11 +1,13 @@
 import {
   createPublicClient,
   PublicClient,
-  http,
   webSocket,
   zeroAddress,
+  decodeAbiParameters,
+  parseAbiParameters,
   type Address,
-  type Abi
+  type Abi,
+  keccak256,
 } from 'npm:viem';
 import ERC20Abi from './abis/ERC20.abi.json' with { type: "json" };
 import ERC721Abi from './abis/ERC721.abi.json' with { type: "json" };
@@ -22,10 +24,14 @@ export const ERC1155_interfaceId = '0xd9b67a26';
 
 export const erc20AndErc721TokenTransferFirstTopic =
   '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-export const erc1155SingleTransferSignature =
+export const erc1155SingleTransferFirstTopic =
   '0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62';
-export const erc1155BatchTransferSignature =
+export const erc1155BatchTransferFirstTopic =
   '0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb';
+export const WETHDepositFirstTopic =
+  '0xe1fffcc4923d04b559f4d29a8bfc6cda04eb5b0d3c460751c2402c5c5cc9109c';
+export const WETHWithdrawalFirstTopic =
+  '0x7fcf532c15f0a6db0bd6d0e038bea71d30d808c7d98cb3bf7268a95bf5081b65';
 
 export function topicToAddress(topic: `0x${string}`): Address {
   return `0x${topic.slice(-40)}` as Address;
@@ -59,7 +65,6 @@ export default class Server {
     const latestBlockNumber = (await this.client?.getBlockNumber()) || BigInt(0);
     console.log('latestBlockNumber :>> ', latestBlockNumber);
     let currentBlockNumber = BigInt(this.chain.blockNumber);
-    currentBlockNumber = 541759n;
     while (currentBlockNumber <= latestBlockNumber) {
       console.log(`Processing block ${currentBlockNumber}`);
       // try {
@@ -67,53 +72,72 @@ export default class Server {
       for (let i = 0; i < block.transactions.length; i++) {
         const tx = block.transactions[i];
         const txReceipt = await this.client.getTransactionReceipt({ hash: tx.hash });
-        const logs = txReceipt.logs.filter((log) =>
-          log.topics[0] === erc20AndErc721TokenTransferFirstTopic &&
-          log.topics[1] &&
-          log.topics[2] &&
-          !log.topics[3]
-        );
-        for (let j = 0; j < logs.length; j++) {
-          const log = logs[j];
-          const from = await this.upsertAddress(topicToAddress(log.topics[1]!));
-          const to = await this.upsertAddress(topicToAddress(log.topics[2]!));
-          const tokenAddress = await this.upsertAddress(log.address);
-          const data = await this.client.multicall({
-            contracts: [{
-              address: tokenAddress.hash as Address,
-              abi: ERC721Abi as Abi,
-              args: [ERC721_interfaceId],
-              functionName: 'supportsInterface',
-            }, {
-              address: tokenAddress.hash as Address,
-              abi: ERC1155Abi as Abi,
-              args: [ERC1155_interfaceId],
-              functionName: 'supportsInterface',
-            }]
-          });
-          if (data[0].status == 'failure' && data[1].status == "failure") {
-            // TODO: have to handle WETH
-            /*
+        for (let j = 0; j < txReceipt.logs.length; j++) {
+          const log = txReceipt.logs[j];
+          if (this.chain.wrappedNativeCurrencies.includes(log.address) && log.topics[0] === WETHDepositFirstTopic && log.topics[1] && !log.topics[2]) { // WETH deposit
+            const [dstAddress] = decodeAbiParameters(parseAbiParameters('address dst'), log.topics[1]);
+            const [wad] = decodeAbiParameters(parseAbiParameters('uint256 wad'), log.data);
+            const dst = await this.upsertAddress(dstAddress);
+            const tokenAddress = await this.upsertAddress(log.address);
             const token = await this.upsertToken(tokenAddress, "ERC20");
-            const amount = BigInt(log.topics[2]!);
+            const index = dst.balances.findIndex((balance: any) => balance.token.address.hash == token.address.hash);
+            if (index >= 0) dst.balances[index].amount = (BigInt(dst.balances[index].amount) + wad).toString();
+            else {
+              dst.balances.push({ token, amount: wad.toString() });
+              token.holders = (BigInt(token.holders!) + 1n).toString();
+            }
+            await dst.save();
+            await token.save();
+            console.log('dst :>> ', dst);
+            console.log('token :>> ', token);
+          }
+          else if (this.chain.wrappedNativeCurrencies.includes(log.address) && log.topics[0] === WETHWithdrawalFirstTopic && log.topics[1] && !log.topics[2]) { // WETH withdrawal
+            const [srcAddress] = decodeAbiParameters(parseAbiParameters('address dst'), log.topics[1]);
+            const [wad] = decodeAbiParameters(parseAbiParameters('uint256 wad'), log.data);
+            const src = await this.upsertAddress(srcAddress);
+            const tokenAddress = await this.upsertAddress(log.address);
+            const token = await this.upsertToken(tokenAddress, "ERC20");
+            const index = src.balances.findIndex((balance: any) => balance.token.address.hash == token.address.hash);
+            src.balances[index].amount = (BigInt(src.balances[index].amount) + wad).toString();
+            if (src.balances[index].amount == "0") {
+              src.balances.splice(index, 1);
+              token.holders = (BigInt(token.holders!) - 1n).toString();
+            }
+            await src.save();
+            await token.save();
+            console.log('src :>> ', src);
+            console.log('token :>> ', token);
+          }
+          else if (
+            log.topics[0] === erc20AndErc721TokenTransferFirstTopic && log.topics[1] && log.topics[2] && !log.topics[3]
+          ) {
+            const [fromAddress] = decodeAbiParameters(parseAbiParameters('address from'), log.topics[1]);
+            const [toAddress] = decodeAbiParameters(parseAbiParameters('address to'), log.topics[2]);
+            const [amount] = decodeAbiParameters(parseAbiParameters('uint256 amount'), log.data);
+            const from = await this.upsertAddress(fromAddress);
+            const to = await this.upsertAddress(toAddress);
+            const tokenAddress = await this.upsertAddress(log.address);
+            const token = await this.upsertToken(tokenAddress, "ERC20");
             const changeBalance = async (address: any, token: any, amount: bigint, isIncrease: boolean) => {
               const index = address.balances.findIndex((balance: any) => balance.token.address.hash == token.address.hash);
               console.log('index :>> ', index);
               if (isIncrease) {
                 if (index >= 0) address.balances[index].amount = (BigInt(address.balances[index].amount) + amount).toString();
-                else address.balances.push({ token, amount: amount.toString() });
+                else {
+                  address.balances.push({ token, amount: amount.toString() });
+                  token.holders = (BigInt(token.holders) + 1n).toString();
+                }
               }
               else {
                 address.balances[index].amount = (BigInt(address.balances[index].amount) + amount).toString();
-                if (address.balances[index].amount == "0") address.balances.splice(index, 1);
+                if (address.balances[index].amount == "0") {
+                  address.balances.splice(index, 1);
+                  token.holders = (BigInt(token.holders) - 1n).toString();
+                }
               }
               await address.save();
               await token.save();
             }
-            console.log('from :>> ', from);
-            console.log('to :>> ', to);
-            console.log('amount :>> ', amount);
-            console.log('token.symbol :>> ', token.symbol);
             if (from.hash == zeroAddress) {
               changeBalance(to, token, amount, true);
               token.totalSupply = (BigInt(token.totalSupply!) + amount).toString();
@@ -126,37 +150,71 @@ export default class Server {
               await changeBalance(from, token, amount, false);
               await changeBalance(to, token, amount, true);
             }
-            await token.save();*/
+            await token.save();
+            console.log('from :>> ', from);
+            console.log('to :>> ', to);
+            console.log('amount :>> ', amount);
+            console.log('token :>> ', token);
           }
-          else if (data[0].result == true) {  // ERC721
-            const token = await this.upsertToken(tokenAddress, "ERC721");
-            const tokenId = BigInt(log.topics[2]!).toString();
-            if (from.hash == zeroAddress) {
-              from.balances.push({ token, tokenId });
-              token.totalSupply = (BigInt(token.totalSupply!) + 1n).toString();
+          else if (log.topics[0] === erc20AndErc721TokenTransferFirstTopic && log.topics[1] && log.topics[2] && log.topics[3]) { // ERC721
+            const data = (await this.client.multicall({
+              contracts: [{
+                address: log.address,
+                abi: ERC721Abi as Abi,
+                args: [ERC721_interfaceId],
+                functionName: 'supportsInterface',
+              }]
+            }))[0];
+
+            if (data.status == 'success' && data.result == true) {  // ERC721
+              const [fromAddress] = decodeAbiParameters(parseAbiParameters('address from'), log.topics[1]);
+              const [toAddress] = decodeAbiParameters(parseAbiParameters('address to'), log.topics[2]);
+              const [tokenId] = decodeAbiParameters(parseAbiParameters('uint256 tokenId'), log.topics[3]);
+              const from = await this.upsertAddress(fromAddress);
+              const to = await this.upsertAddress(toAddress);
+              const tokenAddress = await this.upsertAddress(log.address);
+              const token = await this.upsertToken(tokenAddress, "ERC721");
+              if (from.hash == zeroAddress) {
+                from.balances.push({ token, tokenId });
+                token.totalSupply = (BigInt(token.totalSupply!) + 1n).toString();
+              }
+              else if (to.hash == zeroAddress) {
+                const index = to.balances.findIndex((balance: any) => balance.token.address.hash == token.address.hash && balance.tokenId == tokenId);
+                to.balances.splice(index, 1);
+                token.totalSupply = (BigInt(token.totalSupply!) - 1n).toString();
+              } else {
+                const index = from.balances.findIndex((balance: any) => balance.token.address.hash == token.address.hash && balance.tokenId == tokenId);
+                from.balances.splice(index, 1);
+                to.balances.push({ token, tokenId });
+              }
+              await from.save();
+              await to.save();
+              await token.save()
+              console.log('from :>> ', from);
+              console.log('to :>> ', to);
+              console.log('tokenId :>> ', tokenId);
+              console.log('token :>> ', token);
             }
-            else if (to.hash == zeroAddress) {
-              const index = to.balances.findIndex((balance: any) => balance.token.address.hash == token.address.hash && balance.tokenId == tokenId);
-              to.balances.splice(index, 1);
-              token.totalSupply = (BigInt(token.totalSupply!) - 1n).toString();
-            } else {
-              const index = from.balances.findIndex((balance: any) => balance.token.address.hash == token.address.hash && balance.tokenId == tokenId);
-              from.balances.splice(index, 1);
-              to.balances.push({ token, tokenId });
-            }
-            await from.save();
-            await to.save();
-            await token.save()
           }
-          else if (data[1].result == true) {  // ERC1155
+          else if (log.topics[0] === erc1155SingleTransferFirstTopic && log.topics[1] && log.topics[2] && log.topics[3]) { // ERC1155
+            // TODO: ERC1155
+            /*
+            const [operatorAddress] = decodeAbiParameters(parseAbiParameters('address operator'), log.topics[1]);
+            const [fromAddress] = decodeAbiParameters(parseAbiParameters('address from'), log.topics[2]);
+            const [toAddress] = decodeAbiParameters(parseAbiParameters('address to'), log.topics[3]);
+            const [id, value] = decodeAbiParameters(parseAbiParameters('uint256 id, uint256 value'), log.data);
+            const from = await this.upsertAddress(fromAddress);
+            const to = await this.upsertAddress(toAddress);
+            const tokenAddress = await this.upsertAddress(log.address);
+            const token = await this.upsertToken(tokenAddress, "ERC1155");
+            */
           }
         }
-
       }
       console.log(`Processed block ${currentBlockNumber}`);
+      currentBlockNumber++;
       this.chain.blockNumber = currentBlockNumber.toString();
       await this.chain.save();
-      currentBlockNumber++;
       // } catch (error) {
       //   console.error(`Error fetching block ${currentBlockNumber}: ${error.message}`);
       //   continue;

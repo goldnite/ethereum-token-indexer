@@ -7,6 +7,7 @@ const chainIds = await ChainModel.insertMany(
     chainId: Number(chains[key].id),
     blockNumber: '0',
     currency: chains[key].nativeCurrency.symbol,
+    wrappedNativeCurrencies: chains[key].wrappedNativeCurrencies
   }))
 );
 Deno.exit(0);

@@ -6,6 +6,7 @@
   "nodeModulesDir": true,
   "tasks": {
     "dev": "deno run --allow-all --watch main.ts",
-    "run": "deno run --allow-all main.ts"
+    "run": "deno run --allow-all main.ts",
+    "seed": "deno run --allow-all seed.ts"
   }
 }

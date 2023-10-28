@@ -68,9 +68,10 @@ export default class Server {
     while (currentBlockNumber <= latestBlockNumber) {
       console.log(`Processing block ${currentBlockNumber}`);
       // try {
-      this.processBlock(currentBlockNumber);
+      await this.processBlock(currentBlockNumber);
       console.log(`Processed block ${currentBlockNumber}`);
-      this.chain.blockNumber = (currentBlockNumber + 1n).toString();
+      currentBlockNumber++;
+      this.chain.blockNumber = (currentBlockNumber).toString();
       await this.chain.save();
       // } catch (error) {
       //   console.error(`Error fetching block ${currentBlockNumber}: ${error.message}`);

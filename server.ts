@@ -63,7 +63,6 @@ export default class Server {
     let latestBlockNumber = (await this.client?.getBlockNumber()) || BigInt(0);
     this.client.watchBlockNumber({ onBlockNumber: blockNumber => latestBlockNumber = blockNumber });
     let currentBlockNumber = BigInt(this.chain.blockNumber);
-    currentBlockNumber = 18453985n;
     while (true) {
       if (currentBlockNumber <= latestBlockNumber) {
         console.log(`Processing block ${currentBlockNumber}`);

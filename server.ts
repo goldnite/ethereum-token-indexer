@@ -57,26 +57,28 @@ export default class Server {
       return 0;
     }
     this.chain = await ChainModel.findOne({ chainId: this.chainId });
-    this.startCatchupIndexer();
+    this.startIndexer();
     console.log(`Server with chainId ${this.chainId} bootstrapped.`);
   }
-  async startCatchupIndexer() {
+  async startIndexer() {
     console.log(`Starting catch-up indexer ${this.chainId}.`);
-    const latestBlockNumber = (await this.client?.getBlockNumber()) || BigInt(0);
-    console.log('latestBlockNumber :>> ', latestBlockNumber);
+    let latestBlockNumber = (await this.client?.getBlockNumber()) || BigInt(0);
+    this.client.watchBlockNumber({ onBlockNumber: blockNumber => latestBlockNumber = blockNumber });
     let currentBlockNumber = BigInt(this.chain.blockNumber);
-    while (currentBlockNumber <= latestBlockNumber) {
-      console.log(`Processing block ${currentBlockNumber}`);
-      // try {
-      await this.processBlock(currentBlockNumber);
-      console.log(`Processed block ${currentBlockNumber}`);
-      currentBlockNumber++;
-      this.chain.blockNumber = (currentBlockNumber).toString();
-      await this.chain.save();
-      // } catch (error) {
-      //   console.error(`Error fetching block ${currentBlockNumber}: ${error.message}`);
-      //   continue;
-      // }
+    while (true) {
+      if (currentBlockNumber <= latestBlockNumber) {
+        console.log(`Processing block ${currentBlockNumber}`);
+        // try {
+        await this.processBlock(currentBlockNumber);
+        console.log(`Processed block ${currentBlockNumber}`);
+        currentBlockNumber++;
+        this.chain.blockNumber = (currentBlockNumber).toString();
+        await this.chain.save();
+        // } catch (error) {
+        //   console.error(`Error fetching block ${currentBlockNumber}: ${error.message}`);
+        //   continue;
+        // }
+      }
     }
   }
   async processBlock(blockNumber: bigint) {
@@ -89,6 +91,9 @@ export default class Server {
         if (this.chain.wrappedNativeCurrencies.includes(log.address) && log.topics[0] === WETHDepositFirstTopic && log.topics[1] && !log.topics[2]) { // WETH deposit
           const [dstAddress] = decodeAbiParameters(parseAbiParameters('address dst'), log.topics[1]);
           const [wad] = decodeAbiParameters(parseAbiParameters('uint256 wad'), log.data);
+          console.log('log :>> ', log);
+          console.log('dstAddress :>> ', dstAddress);
+          console.log('wad :>> ', wad);
           const dst = await this.upsertAddress(dstAddress);
           const tokenAddress = await this.upsertAddress(log.address);
           const token = await this.upsertToken(tokenAddress, "ERC20");
@@ -106,14 +111,19 @@ export default class Server {
         else if (this.chain.wrappedNativeCurrencies.includes(log.address) && log.topics[0] === WETHWithdrawalFirstTopic && log.topics[1] && !log.topics[2]) { // WETH withdrawal
           const [srcAddress] = decodeAbiParameters(parseAbiParameters('address dst'), log.topics[1]);
           const [wad] = decodeAbiParameters(parseAbiParameters('uint256 wad'), log.data);
+          console.log('log :>> ', log);
+          console.log('srcAddress :>> ', srcAddress);
+          console.log('wad :>> ', wad);
           const src = await this.upsertAddress(srcAddress);
           const tokenAddress = await this.upsertAddress(log.address);
           const token = await this.upsertToken(tokenAddress, "ERC20");
           const index = src.balances.findIndex((balance: any) => balance.token.address.hash == token.address.hash);
-          src.balances[index].amount = (BigInt(src.balances[index].amount) + wad).toString();
-          if (src.balances[index].amount == "0") {
-            src.balances.splice(index, 1);
-            token.holders = (BigInt(token.holders!) - 1n).toString();
+          if (index >= 0) {
+            src.balances[index].amount = (BigInt(src.balances[index].amount) + wad).toString();
+            if (src.balances[index].amount == "0") {
+              src.balances.splice(index, 1);
+              token.holders = (BigInt(token.holders!) - 1n).toString();
+            }
           }
           await src.save();
           await token.save();
@@ -124,6 +134,10 @@ export default class Server {
           const [fromAddress] = decodeAbiParameters(parseAbiParameters('address from'), log.topics[1]);
           const [toAddress] = decodeAbiParameters(parseAbiParameters('address to'), log.topics[2]);
           const [amount] = decodeAbiParameters(parseAbiParameters('uint256 amount'), log.data);
+          console.log('log :>> ', log);
+          console.log('fromAddress :>> ', fromAddress);
+          console.log('toAddress :>> ', toAddress);
+          console.log('amount :>> ', amount);
           const from = await this.upsertAddress(fromAddress);
           const to = await this.upsertAddress(toAddress);
           const tokenAddress = await this.upsertAddress(log.address);
@@ -138,7 +152,7 @@ export default class Server {
                 token.holders = (BigInt(token.holders) + 1n).toString();
               }
             }
-            else {
+            else if (index >= 0) {
               address.balances[index].amount = (BigInt(address.balances[index].amount) + amount).toString();
               if (address.balances[index].amount == "0") {
                 address.balances.splice(index, 1);
@@ -180,6 +194,10 @@ export default class Server {
             const [fromAddress] = decodeAbiParameters(parseAbiParameters('address from'), log.topics[1]);
             const [toAddress] = decodeAbiParameters(parseAbiParameters('address to'), log.topics[2]);
             const [tokenId] = decodeAbiParameters(parseAbiParameters('uint256 tokenId'), log.topics[3]);
+            console.log('log :>> ', log);
+            console.log('fromAddress :>> ', fromAddress);
+            console.log('toAddress :>> ', toAddress);
+            console.log('tokenId :>> ', tokenId);
             const from = await this.upsertAddress(fromAddress);
             const to = await this.upsertAddress(toAddress);
             const tokenAddress = await this.upsertAddress(log.address);

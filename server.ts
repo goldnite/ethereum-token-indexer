@@ -387,7 +387,8 @@ export default class Server {
             holders: "0",
             name: metadata.name,
             symbol: metadata.symbol,
-            totalSupply: "0"
+            totalSupply: "0",
+            chain: this.chain,
           });
           break;
         case 'ERC721':
@@ -398,7 +399,8 @@ export default class Server {
               holders: "0",
               name: metadata.name,
               symbol: metadata.symbol,
-              totalSupply: "0"
+              totalSupply: "0",
+              chain: this.chain,
             });
           break;
         case 'ERC1155':
@@ -407,7 +409,8 @@ export default class Server {
               type: tokenType,
               address: tokenAddress,
               holders: "0",
-              totalSupply: "0"
+              totalSupply: "0",
+              chain: this.chain,
             });
           break;
         default:

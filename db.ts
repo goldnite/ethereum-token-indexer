@@ -29,6 +29,10 @@ export const AddressSchema = new Schema({
 });
 
 export const TokenSchema = new Schema({
+  chain: {
+    type: Schema.Types.ObjectId,
+    ref: 'Chain',
+  },
   type: {
     type: String,
     enum: ['ERC20', 'ERC721', 'ERC1155']

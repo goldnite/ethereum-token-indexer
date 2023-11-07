@@ -1,6 +1,7 @@
 import {
   createPublicClient,
   PublicClient,
+  http,
   webSocket,
   zeroAddress,
   decodeAbiParameters,
@@ -48,7 +49,7 @@ export default class Server {
     console.log('Starting server.');
     this.client = createPublicClient({
       chain: chains[this.chainId],
-      transport: webSocket()
+      transport: http()
     });
     if (!this.client) {
       console.error('Failed to initialize client.');
@@ -141,7 +142,7 @@ export default class Server {
           const tokenAddress = await this.upsertAddress(log.address);
           const token = await this.upsertToken(tokenAddress, "ERC20");
           if (!token) continue;
-          const changeBalance = (address: any, token: any, amount: bigint, isIncrease: boolean) => {
+          const updateBalance = (address: any, token: any, amount: bigint, isIncrease: boolean) => {
             const index = address.balances.findIndex((balance: any) => balance.token.address.hash == token.address.hash);
             console.log('index :>> ', index);
             if (isIncrease) {
@@ -160,16 +161,16 @@ export default class Server {
             }
           }
           if (from.hash == zeroAddress) {
-            changeBalance(to, token, amount, true);
+            updateBalance(to, token, amount, true);
             token.totalSupply = (BigInt(token.totalSupply!) + amount).toString();
           }
           else if (to.hash == zeroAddress) {
-            changeBalance(from, token, amount, false);
+            updateBalance(from, token, amount, false);
             token.totalSupply = (BigInt(token.totalSupply!) - amount).toString();
           }
           else {
-            changeBalance(from, token, amount, false);
-            changeBalance(to, token, amount, true);
+            updateBalance(from, token, amount, false);
+            updateBalance(to, token, amount, true);
           }
           await from.save();
           await to.save();
@@ -229,7 +230,7 @@ export default class Server {
           const tokenAddress = await this.upsertAddress(log.address);
           const token = await this.upsertToken(tokenAddress, "ERC1155");
           if (!token) continue;
-          const changeBalance = (address: any, token: any, tokenId: bigint, value: bigint, isIncrease: boolean) => {
+          const updateBalance = (address: any, token: any, tokenId: bigint, value: bigint, isIncrease: boolean) => {
             const index = address.balances.findIndex((balance: any) => balance.token.address.hash == token.address.hash && balance.tokenId == tokenId);
             console.log('index :>> ', index);
             if (isIncrease) {
@@ -248,14 +249,14 @@ export default class Server {
             }
           }
           if (from.hash == zeroAddress) {
-            changeBalance(to, token, id, value, true);
+            updateBalance(to, token, id, value, true);
           }
           else if (to.hash == zeroAddress) {
-            changeBalance(from, token, id, value, false);
+            updateBalance(from, token, id, value, false);
           }
           else {
-            changeBalance(from, token, id, value, false);
-            changeBalance(to, token, id, value, true);
+            updateBalance(from, token, id, value, false);
+            updateBalance(to, token, id, value, true);
           }
           await from.save();
           await to.save();
@@ -281,7 +282,7 @@ export default class Server {
           const tokenAddress = await this.upsertAddress(log.address);
           const token = await this.upsertToken(tokenAddress, "ERC1155");
           if (!token) continue;
-          const changeBalance = (address: any, token: any, tokenIds: readonly bigint[], values: readonly bigint[], isIncrease: boolean) => {
+          const updateBalance = (address: any, token: any, tokenIds: readonly bigint[], values: readonly bigint[], isIncrease: boolean) => {
             for (let i = 0; i < tokenIds.length; i++) {
               const tokenId = tokenIds[i];
               const value = values[i];
@@ -304,14 +305,14 @@ export default class Server {
             }
           }
           if (from.hash == zeroAddress) {
-            changeBalance(to, token, ids, values, true);
+            updateBalance(to, token, ids, values, true);
           }
           else if (to.hash == zeroAddress) {
-            changeBalance(from, token, ids, values, false);
+            updateBalance(from, token, ids, values, false);
           }
           else {
-            changeBalance(from, token, ids, values, false);
-            changeBalance(to, token, ids, values, true);
+            updateBalance(from, token, ids, values, false);
+            updateBalance(to, token, ids, values, true);
           }
           await from.save();
           await to.save();

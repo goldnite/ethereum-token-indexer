@@ -47,6 +47,6 @@ export const TokenSchema = new Schema({
   totalSupply: String
 });
 
-export const ChainModel = mongoose.model("Chain", ChainSchema);
+export const ChainModel = mongoose.model("Chain", ChainSchema, );
 export const AddressModel = mongoose.model("Address", AddressSchema);
 export const TokenModel = mongoose.model("Token", TokenSchema);

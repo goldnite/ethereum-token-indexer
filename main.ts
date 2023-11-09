@@ -1,5 +1,4 @@
-import { ChainModel, AddressModel, TokenModel } from './db.ts';
-import { qitmeer } from "./chains.ts";
+import { ChainModel } from './db.ts';
 import Server from './server.ts';
 
 const chains = await ChainModel.find({});

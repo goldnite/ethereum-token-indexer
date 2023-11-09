@@ -1,4 +1,4 @@
-import { defineChain, } from 'npm:viem';
+import { defineChain } from 'npm:viem';
 
 export const qitmeer = defineChain({
   id: 813,
@@ -33,6 +33,7 @@ export const qitmeer = defineChain({
     },
   },
 })
+// deno-lint-ignore no-explicit-any
 export const chains: Record<string, any> = {
   "813": qitmeer,
 };

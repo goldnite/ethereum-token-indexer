@@ -81,7 +81,7 @@ export default class Server {
   async processBlock(blockNumber: bigint) {
     const block = await this.client.getBlock({ blockNumber, includeTransactions: true });
     function upsertArray(arr: AddressDocument[] | TokenDocument[], item: AddressDocument | TokenDocument) {
-      const index = arr.findIndex((element: AddressDocument | TokenDocument) => element._id == item._id);
+      const index = arr.findIndex((element: AddressDocument | TokenDocument) => element._id === item._id);
       if (index >= 0) arr[index] = item;
       // deno-lint-ignore no-explicit-any
       else arr.push(item as any);
@@ -97,12 +97,12 @@ export default class Server {
           logger.debug('log :>> ' + log);
           logger.debug('dstAddress :>> ' + dstAddress);
           logger.debug('wad :>> ' + wad);
-          const dst = await this.upsertAddress(dstAddress);
-          const tokenAddress = await this.upsertAddress(log.address);
-          const token = await this.upsertToken(tokenAddress, "ERC20");
+          const dst = await this.upsertAddress(addresses, dstAddress);
+          const tokenAddress = await this.upsertAddress(addresses, log.address);
+          const token = await this.upsertToken(tokens, tokenAddress, "ERC20");
           if (!token) continue;
           // deno-lint-ignore no-explicit-any
-          const index = dst.balances.findIndex((balance: any) => balance.token.address.hash == token.address.hash);
+          const index = dst.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash);
           if (index >= 0) dst.balances[index].amount = (BigInt(dst.balances[index].amount) + wad).toString();
           else {
             dst.balances.push({ token, amount: wad.toString() });
@@ -120,15 +120,15 @@ export default class Server {
           logger.debug('log :>> ' + log);
           logger.debug('srcAddress :>> ' + srcAddress);
           logger.debug('wad :>> ' + wad);
-          const src = await this.upsertAddress(srcAddress);
-          const tokenAddress = await this.upsertAddress(log.address);
-          const token = await this.upsertToken(tokenAddress, "ERC20");
+          const src = await this.upsertAddress(addresses, srcAddress);
+          const tokenAddress = await this.upsertAddress(addresses, log.address);
+          const token = await this.upsertToken(tokens, tokenAddress, "ERC20");
           if (!token) continue;
           // deno-lint-ignore no-explicit-any
-          const index = src.balances.findIndex((balance: any) => balance.token.address.hash == token.address.hash);
+          const index = src.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash);
           if (index >= 0) {
             src.balances[index].amount = (BigInt(src.balances[index].amount) + wad).toString();
-            if (src.balances[index].amount == "0") {
+            if (src.balances[index].amount === "0") {
               src.balances.splice(index, 1);
               token.holders = (BigInt(token.holders!) - 1n).toString();
             }
@@ -147,14 +147,14 @@ export default class Server {
           logger.debug('fromAddress :>> ' + fromAddress);
           logger.debug('toAddress :>> ' + toAddress);
           logger.debug('amount :>> ' + amount);
-          const from = await this.upsertAddress(fromAddress);
-          const to = await this.upsertAddress(toAddress);
-          const tokenAddress = await this.upsertAddress(log.address);
-          const token = await this.upsertToken(tokenAddress, "ERC20");
+          const from = await this.upsertAddress(addresses, fromAddress);
+          const to = await this.upsertAddress(addresses, toAddress);
+          const tokenAddress = await this.upsertAddress(addresses, log.address);
+          const token = await this.upsertToken(tokens, tokenAddress, "ERC20");
           if (!token) continue;
           const updateBalance = (address: AddressDocument, token: TokenDocument, amount: bigint, isIncrease: boolean) => {
             // deno-lint-ignore no-explicit-any
-            const index = address.balances.findIndex((balance: any) => balance.token.address.hash == token.address.hash);
+            const index = address.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash);
             logger.debug('index :>> ' + index);
             if (isIncrease) {
               if (index >= 0) address.balances[index].amount = (BigInt(address.balances[index].amount) + amount).toString();
@@ -165,17 +165,17 @@ export default class Server {
             }
             else if (index >= 0) {
               address.balances[index].amount = (BigInt(address.balances[index].amount) + amount).toString();
-              if (address.balances[index].amount == "0") {
+              if (address.balances[index].amount === "0") {
                 address.balances.splice(index, 1);
                 token.holders = (BigInt(token.holders!) - 1n).toString();
               }
             }
           }
-          if (from.hash == zeroAddress) {
+          if (from.hash === zeroAddress) {
             updateBalance(to, token, amount, true);
             token.totalSupply = (BigInt(token.totalSupply!) + amount).toString();
           }
-          else if (to.hash == zeroAddress) {
+          else if (to.hash === zeroAddress) {
             updateBalance(from, token, amount, false);
             token.totalSupply = (BigInt(token.totalSupply!) - amount).toString();
           }
@@ -200,23 +200,23 @@ export default class Server {
           logger.debug('fromAddress :>> ' + fromAddress);
           logger.debug('toAddress :>> ' + toAddress);
           logger.debug('tokenId :>> ' + tokenId);
-          const from = await this.upsertAddress(fromAddress);
-          const to = await this.upsertAddress(toAddress);
-          const tokenAddress = await this.upsertAddress(log.address);
-          const token = await this.upsertToken(tokenAddress, "ERC721");
+          const from = await this.upsertAddress(addresses, fromAddress);
+          const to = await this.upsertAddress(addresses, toAddress);
+          const tokenAddress = await this.upsertAddress(addresses, log.address);
+          const token = await this.upsertToken(tokens, tokenAddress, "ERC721");
           if (!token) continue;
-          if (from.hash == zeroAddress) {
+          if (from.hash === zeroAddress) {
             from.balances.push({ token, tokenId });
             token.totalSupply = (BigInt(token.totalSupply!) + 1n).toString();
           }
-          else if (to.hash == zeroAddress) {
+          else if (to.hash === zeroAddress) {
             // deno-lint-ignore no-explicit-any
-            const index = to.balances.findIndex((balance: any) => balance.token.address.hash == token.address.hash && balance.tokenId == tokenId);
+            const index = to.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash && balance.tokenId === tokenId);
             to.balances.splice(index, 1);
             token.totalSupply = (BigInt(token.totalSupply!) - 1n).toString();
           } else {
             // deno-lint-ignore no-explicit-any
-            const index = from.balances.findIndex((balance: any) => balance.token.address.hash == token.address.hash && balance.tokenId == tokenId);
+            const index = from.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash && balance.tokenId === tokenId);
             from.balances.splice(index, 1);
             to.balances.push({ token, tokenId });
           }
@@ -239,15 +239,15 @@ export default class Server {
           logger.debug('toAddress :>> ' + toAddress);
           logger.debug('id :>> ' + id);
           logger.debug('value :>> ' + value);
-          await this.upsertAddress(operatorAddress);
-          const from = await this.upsertAddress(fromAddress);
-          const to = await this.upsertAddress(toAddress);
-          const tokenAddress = await this.upsertAddress(log.address);
-          const token = await this.upsertToken(tokenAddress, "ERC1155");
+          await this.upsertAddress(addresses, operatorAddress);
+          const from = await this.upsertAddress(addresses, fromAddress);
+          const to = await this.upsertAddress(addresses, toAddress);
+          const tokenAddress = await this.upsertAddress(addresses, log.address);
+          const token = await this.upsertToken(tokens, tokenAddress, "ERC1155");
           if (!token) continue;
           const updateBalance = (address: AddressDocument, token: TokenDocument, tokenId: bigint, value: bigint, isIncrease: boolean) => {
             // deno-lint-ignore no-explicit-any
-            const index = address.balances.findIndex((balance: any) => balance.token.address.hash == token.address.hash && balance.tokenId == tokenId);
+            const index = address.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash && balance.tokenId === tokenId);
             logger.debug('index :>> ' + index);
             if (isIncrease) {
               if (index >= 0) address.balances[index].amount = (BigInt(address.balances[index].amount) + value).toString();
@@ -258,16 +258,16 @@ export default class Server {
             }
             else if (index >= 0) {
               address.balances[index].amount = (BigInt(address.balances[index].amount) + value).toString();
-              if (address.balances[index].amount == "0") {
+              if (address.balances[index].amount === "0") {
                 address.balances.splice(index, 1);
                 token.holders = (BigInt(token.holders!) - 1n).toString();
               }
             }
           }
-          if (from.hash == zeroAddress) {
+          if (from.hash === zeroAddress) {
             updateBalance(to, token, id, value, true);
           }
-          else if (to.hash == zeroAddress) {
+          else if (to.hash === zeroAddress) {
             updateBalance(from, token, id, value, false);
           }
           else {
@@ -293,18 +293,18 @@ export default class Server {
           logger.debug('toAddress :>> ' + toAddress);
           logger.debug('ids :>> ' + ids);
           logger.debug('values :>> ' + values);
-          await this.upsertAddress(operatorAddress);
-          const from = await this.upsertAddress(fromAddress);
-          const to = await this.upsertAddress(toAddress);
-          const tokenAddress = await this.upsertAddress(log.address);
-          const token = await this.upsertToken(tokenAddress, "ERC1155");
+          await this.upsertAddress(addresses, operatorAddress);
+          const from = await this.upsertAddress(addresses, fromAddress);
+          const to = await this.upsertAddress(addresses, toAddress);
+          const tokenAddress = await this.upsertAddress(addresses, log.address);
+          const token = await this.upsertToken(tokens, tokenAddress, "ERC1155");
           if (!token) continue;
           const updateBalance = (address: AddressDocument, token: TokenDocument, tokenIds: readonly bigint[], values: readonly bigint[], isIncrease: boolean) => {
             for (let i = 0; i < tokenIds.length; i++) {
               const tokenId = tokenIds[i];
               const value = values[i];
               // deno-lint-ignore no-explicit-any
-              const index = address.balances.findIndex((balance: any) => balance.token.address.hash == token.address.hash && balance.tokenId == tokenId);
+              const index = address.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash && balance.tokenId === tokenId);
               logger.debug('index :>> ' + index);
               if (isIncrease) {
                 if (index >= 0) address.balances[index].amount = (BigInt(address.balances[index].amount) + value).toString();
@@ -315,17 +315,17 @@ export default class Server {
               }
               else if (index >= 0) {
                 address.balances[index].amount = (BigInt(address.balances[index].amount) + value).toString();
-                if (address.balances[index].amount == "0") {
+                if (address.balances[index].amount === "0") {
                   address.balances.splice(index, 1);
                   token.holders = (BigInt(token.holders!) - 1n).toString();
                 }
               }
             }
           }
-          if (from.hash == zeroAddress) {
+          if (from.hash === zeroAddress) {
             updateBalance(to, token, ids, values, true);
           }
-          else if (to.hash == zeroAddress) {
+          else if (to.hash === zeroAddress) {
             updateBalance(from, token, ids, values, false);
           }
           else {
@@ -346,8 +346,10 @@ export default class Server {
     await AddressModel.bulkSave(addresses);
     await TokenModel.bulkSave(tokens);
   }
-  async upsertAddress(hash: Address) {
+  async upsertAddress(addresses: AddressDocument[], hash: Address) {
     hash = hash.toLowerCase() as Address;
+    const index = addresses.findIndex((element: AddressDocument) => element.hash === hash);
+    if (index >= 0) return addresses[index];
     let address = await AddressModel.findOne({ hash }).populate({
       path: 'chain'
     }).populate({
@@ -366,7 +368,9 @@ export default class Server {
     }
     return address;
   }
-  async upsertToken(tokenAddress: AddressDocument, tokenType: string) {
+  async upsertToken(tokens: TokenDocument[], tokenAddress: AddressDocument, tokenType: string) {
+    const index = tokens.findIndex((element: TokenDocument) => element.address.hash === tokenAddress.hash);
+    if (index >= 0) return tokens[index];
     let token = await TokenModel.findOne({ address: tokenAddress }).populate("address").exec();
     if (!token) {
       const data = await this.client.multicall({
@@ -393,8 +397,8 @@ export default class Server {
           }
         ]
       });
-      const isERC721 = data[0].status === 'success' && data[0].result == true;
-      const isERC1155 = data[1].status === 'success' && data[1].result == true;
+      const isERC721 = data[0].status === 'success' && data[0].result === true;
+      const isERC1155 = data[1].status === 'success' && data[1].result === true;
       const metadata = {
         name: data[2].status === "success" ? String(data[2].result) : "",
         symbol: data[3].status === "success" ? String(data[3].result) : "",

@@ -1,4 +1,11 @@
-import { defineChain } from 'npm:viem';
+import { defineChain, type Chain } from 'npm:viem';
+import { mainnet } from 'npm:viem/chains';
+
+export const wrappedNativeCurrencies: Record<string, string[]> = {
+  "813": [
+    '0x470cbfb236860eb5257bbf78715fb5bd77119c2f'
+  ]
+};
 
 export const qitmeer = defineChain({
   id: 813,
@@ -9,13 +16,10 @@ export const qitmeer = defineChain({
     name: 'MEER',
     symbol: 'MEER',
   },
-  wrappedNativeCurrencies: [
-    '0x470cbfb236860eb5257bbf78715fb5bd77119c2f'
-  ],
   rpcUrls: {
     default: {
-      http: ['https://qng.rpc.qitmeer.io'],
-      webSocket: ['wss://qng.rpc.qitmeer.io'],
+      http: ['https://rpc.woowow.io'],
+      webSocket: ['wss://rpc.woowow.io'],
     },
     public: {
       http: ['https://qng.rpc.qitmeer.io', 'https://mainnet.meerlabs.com', 'https://rpc.dimai.ai', 'https://rpc.woowow.io'],
@@ -32,8 +36,8 @@ export const qitmeer = defineChain({
       blockCreated: 744781,
     },
   },
-})
-// deno-lint-ignore no-explicit-any
-export const chains: Record<string, any> = {
+});
+
+export const chains: Record<string, Chain> = {
   "813": qitmeer,
 };

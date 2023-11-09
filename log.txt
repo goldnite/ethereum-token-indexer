@@ -1,0 +1,215 @@
+INFO Starting server.
+INFO Starting catch-up indexer 813.
+INFO Server with chainId 813 bootstrapped.
+INFO Processing block 1040
+DEBUG log :>> 
+DEBUG fromAddress :>> 
+DEBUG toAddress :>> 
+DEBUG amount :>> 
+DEBUG index :>> 
+DEBUG index :>> 
+DEBUG from :>> 
+DEBUG to :>> 
+DEBUG amount :>> 
+DEBUG token :>> 
+DEBUG log :>> 
+DEBUG dstAddress :>> 
+DEBUG wad :>> 
+DEBUG dst :>> 
+DEBUG token :>> 
+DEBUG log :>> 
+DEBUG fromAddress :>> 
+DEBUG toAddress :>> 
+DEBUG amount :>> 
+DEBUG index :>> 
+DEBUG index :>> 
+DEBUG from :>> 
+DEBUG to :>> 
+DEBUG amount :>> 
+DEBUG token :>> 
+DEBUG log :>> 
+DEBUG fromAddress :>> 
+DEBUG toAddress :>> 
+DEBUG amount :>> 
+DEBUG index :>> 
+DEBUG from :>> 
+DEBUG to :>> 
+DEBUG amount :>> 
+DEBUG token :>> 
+INFO Processed block 1040
+INFO Processing block 1041
+INFO Processed block 1041
+INFO Processing block 1042
+INFO Processed block 1042
+INFO Processing block 1043
+INFO Processed block 1043
+INFO Processing block 1044
+INFO Processed block 1044
+INFO Processing block 1045
+DEBUG log :>> 
+DEBUG dstAddress :>> 
+DEBUG wad :>> 
+DEBUG dst :>> 
+DEBUG token :>> 
+DEBUG log :>> 
+DEBUG fromAddress :>> 
+DEBUG toAddress :>> 
+DEBUG amount :>> 
+DEBUG index :>> 
+DEBUG index :>> 
+DEBUG from :>> 
+DEBUG to :>> 
+DEBUG amount :>> 
+DEBUG token :>> 
+DEBUG log :>> 
+DEBUG fromAddress :>> 
+DEBUG toAddress :>> 
+DEBUG amount :>> 
+DEBUG index :>> 
+DEBUG index :>> 
+DEBUG from :>> 
+DEBUG to :>> 
+DEBUG amount :>> 
+DEBUG token :>> 
+INFO Processed block 1045
+INFO Processing block 1046
+INFO Processed block 1046
+INFO Processing block 1047
+DEBUG log :>> 
+DEBUG dstAddress :>> 
+DEBUG wad :>> 
+DEBUG dst :>> 
+DEBUG token :>> 
+DEBUG log :>> 
+DEBUG fromAddress :>> 
+DEBUG toAddress :>> 
+DEBUG amount :>> 
+DEBUG index :>> 
+DEBUG index :>> 
+DEBUG from :>> 
+DEBUG to :>> 
+DEBUG amount :>> 
+DEBUG token :>> 
+DEBUG log :>> 
+DEBUG fromAddress :>> 
+DEBUG toAddress :>> 
+DEBUG amount :>> 
+DEBUG index :>> 
+DEBUG index :>> 
+DEBUG from :>> 
+DEBUG to :>> 
+DEBUG amount :>> 
+DEBUG token :>> 
+INFO Processed block 1047
+INFO Processing block 1048
+INFO Processed block 1048
+INFO Processing block 1049
+DEBUG log :>> 
+DEBUG dstAddress :>> 
+DEBUG wad :>> 
+DEBUG dst :>> 
+DEBUG token :>> 
+DEBUG log :>> 
+DEBUG fromAddress :>> 
+DEBUG toAddress :>> 
+DEBUG amount :>> 
+DEBUG index :>> 
+DEBUG index :>> 
+DEBUG from :>> 
+DEBUG to :>> 
+DEBUG amount :>> 
+DEBUG token :>> 
+DEBUG log :>> 
+DEBUG fromAddress :>> 
+DEBUG toAddress :>> 
+DEBUG amount :>> 
+DEBUG index :>> 
+DEBUG index :>> 
+DEBUG from :>> 
+DEBUG to :>> 
+DEBUG amount :>> 
+DEBUG token :>> 
+INFO Processed block 1049
+INFO Processing block 1050
+INFO Processed block 1050
+INFO Processing block 1051
+DEBUG log :>> 
+DEBUG fromAddress :>> 
+DEBUG toAddress :>> 
+DEBUG amount :>> 
+DEBUG index :>> 
+DEBUG index :>> 
+DEBUG from :>> 
+DEBUG to :>> 
+DEBUG amount :>> 
+DEBUG token :>> 
+INFO Processed block 1051
+INFO Processing block 1052
+DEBUG log :>> 
+DEBUG fromAddress :>> 
+DEBUG toAddress :>> 
+DEBUG amount :>> 
+DEBUG index :>> 
+DEBUG index :>> 
+DEBUG from :>> 
+DEBUG to :>> 
+DEBUG amount :>> 
+DEBUG token :>> 
+INFO Processed block 1052
+INFO Processing block 1053
+DEBUG log :>> 
+DEBUG dstAddress :>> 
+DEBUG wad :>> 
+DEBUG dst :>> 
+DEBUG token :>> 
+DEBUG log :>> 
+DEBUG fromAddress :>> 
+DEBUG toAddress :>> 
+DEBUG amount :>> 
+DEBUG index :>> 
+DEBUG index :>> 
+DEBUG from :>> 
+DEBUG to :>> 
+DEBUG amount :>> 
+DEBUG token :>> 
+DEBUG log :>> 
+DEBUG fromAddress :>> 
+DEBUG toAddress :>> 
+DEBUG amount :>> 
+DEBUG index :>> 
+DEBUG index :>> 
+DEBUG from :>> 
+DEBUG to :>> 
+DEBUG amount :>> 
+DEBUG token :>> 
+INFO Processed block 1053
+INFO Processing block 1054
+INFO Processed block 1054
+INFO Processing block 1055
+DEBUG log :>> 
+DEBUG fromAddress :>> 
+DEBUG toAddress :>> 
+DEBUG amount :>> 
+DEBUG index :>> 
+DEBUG index :>> 
+DEBUG from :>> 
+DEBUG to :>> 
+DEBUG amount :>> 
+DEBUG token :>> 
+DEBUG log :>> 
+DEBUG dstAddress :>> 
+DEBUG wad :>> 
+DEBUG dst :>> 
+DEBUG token :>> 
+DEBUG log :>> 
+DEBUG fromAddress :>> 
+DEBUG toAddress :>> 
+DEBUG amount :>> 
+DEBUG index :>> 
+DEBUG index :>> 
+DEBUG from :>> 
+DEBUG to :>> 
+DEBUG amount :>> 
+DEBUG token :>> 
+DEBUG log :>> 
+DEBUG fromAddress :>> 

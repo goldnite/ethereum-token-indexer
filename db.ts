@@ -29,10 +29,6 @@ export const AddressSchema = new Schema({
 });
 
 export const TokenSchema = new Schema({
-  chain: {
-    type: Schema.Types.ObjectId,
-    ref: 'Chain',
-  },
   type: {
     type: String,
     enum: ['ERC20', 'ERC721', 'ERC1155']
@@ -46,6 +42,21 @@ export const TokenSchema = new Schema({
   symbol: String,
   totalSupply: String
 });
+
+export const CollectionSchema = new Schema({
+  token: {
+    type: Schema.Types.ObjectId,
+    ref: 'Token'
+  },
+  tokenId: String,
+  name: String,
+  symbol: String,
+  totalSupply: String,
+  description: String,
+  external_url: String,
+  image: String,
+  attributes: [Object]
+})
 
 export const ChainModel = mongoose.model("Chain", ChainSchema,);
 export const AddressModel = mongoose.model("Address", AddressSchema);

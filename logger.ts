@@ -5,7 +5,7 @@ await log.setup({
     console: new log.handlers.ConsoleHandler("DEBUG"),
 
     file: new log.handlers.FileHandler("WARNING", {
-      filename: "./log.txt",
+      filename: "./indexer.log",
       formatter: "{levelName} {msg}"
     })
   },

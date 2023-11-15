@@ -17,9 +17,12 @@ import {
   ChainModel,
   AddressModel,
   TokenModel,
+  TransferModel,
   type ChainDocument,
   type AddressDocument,
   type TokenDocument,
+  CollectionDocument,
+  TransferDocument,
 } from './db.ts';
 import {
   ERC721_interfaceId,
@@ -36,6 +39,7 @@ export default class Server {
   chainId: number;
   client!: PublicClient;
   chain!: ChainDocument;
+  zeroAddress!: AddressDocument;
   flagERC20 = true;
   flagERC721 = true;
   flagERC1155 = true;
@@ -54,6 +58,9 @@ export default class Server {
       return 0;
     }
     this.chain = await ChainModel.findOne({ chainId: this.chainId }) as ChainDocument;
+    this.zeroAddress = await AddressModel.findOne({
+      hash: zeroAddress
+    }) as AddressDocument;
     this.startIndexer();
     logger.info(`Server with chainId ${this.chainId} bootstrapped.`);
   }
@@ -86,72 +93,98 @@ export default class Server {
       // deno-lint-ignore no-explicit-any
       else arr.push(item as any);
     }
-    const addresses: AddressDocument[] = [];
+    const addresses: AddressDocument[] = [this.zeroAddress];
     const tokens: TokenDocument[] = [];
+    const collections: CollectionDocument[] = [];
+    const transfers: TransferDocument[] = [];
     for (const tx of block.transactions) {
       const txReceipt = await this.client.getTransactionReceipt({ hash: tx.hash });
       for (const log of txReceipt.logs) {
         if (this.flagERC20 && this.chain.wrappedNativeCurrencies.includes(log.address) && log.topics[0] === WETHDepositFirstTopic && log.topics[1] && !log.topics[2]) { // WETH deposit
-          const [dstAddress] = decodeAbiParameters(parseAbiParameters('address dst'), log.topics[1]);
+          const [dst] = decodeAbiParameters(parseAbiParameters('address dst'), log.topics[1]);
           const [wad] = decodeAbiParameters(parseAbiParameters('uint256 wad'), log.data);
           logger.debug('log :>> ' + log);
-          logger.debug('dstAddress :>> ' + dstAddress);
+          logger.debug('dstAddress :>> ' + dst);
           logger.debug('wad :>> ' + wad);
-          const dst = await this.upsertAddress(addresses, dstAddress);
+          const dstAddress = await this.upsertAddress(addresses, dst);
           const tokenAddress = await this.upsertAddress(addresses, log.address);
           const token = await this.upsertToken(tokens, tokenAddress, "ERC20");
           if (!token) continue;
+          transfers.push(new TransferModel({
+            token,
+            from: this.zeroAddress,
+            to: dstAddress,
+            txHash: tx.hash,
+            logIndex: log.logIndex,
+            amount: wad.toString()
+          }));
           // deno-lint-ignore no-explicit-any
-          const index = dst.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash);
-          if (index >= 0) dst.balances[index].amount = (BigInt(dst.balances[index].amount) + wad).toString();
+          const index = dstAddress.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash);
+          if (index >= 0) dstAddress.balances[index].amount = (BigInt(dstAddress.balances[index].amount) + wad).toString();
           else {
-            dst.balances.push({ token, amount: wad.toString() });
+            dstAddress.balances.push({ token, amount: wad.toString() });
             token.holders = (BigInt(token.holders!) + 1n).toString();
           }
-          upsertArray(addresses, dst);
+          upsertArray(addresses, dstAddress);
           upsertArray(addresses, tokenAddress);
           upsertArray(tokens, token);
-          logger.debug('dst :>> ' + dst);
+          logger.debug('dst :>> ' + dstAddress);
           logger.debug('token :>> ' + token);
         }
         else if (this.flagERC20 && this.chain.wrappedNativeCurrencies.includes(log.address) && log.topics[0] === WETHWithdrawalFirstTopic && log.topics[1] && !log.topics[2]) { // WETH withdrawal
-          const [srcAddress] = decodeAbiParameters(parseAbiParameters('address dst'), log.topics[1]);
+          const [src] = decodeAbiParameters(parseAbiParameters('address src'), log.topics[1]);
           const [wad] = decodeAbiParameters(parseAbiParameters('uint256 wad'), log.data);
           logger.debug('log :>> ' + log);
-          logger.debug('srcAddress :>> ' + srcAddress);
+          logger.debug('srcAddress :>> ' + src);
           logger.debug('wad :>> ' + wad);
-          const src = await this.upsertAddress(addresses, srcAddress);
+          const srcAddress = await this.upsertAddress(addresses, src);
           const tokenAddress = await this.upsertAddress(addresses, log.address);
           const token = await this.upsertToken(tokens, tokenAddress, "ERC20");
           if (!token) continue;
+          transfers.push(new TransferModel({
+            token,
+            from: srcAddress,
+            to: this.zeroAddress,
+            txHash: tx.hash,
+            logIndex: log.logIndex,
+            amount: wad.toString()
+          }));
           // deno-lint-ignore no-explicit-any
-          const index = src.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash);
+          const index = srcAddress.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash);
           if (index >= 0) {
-            src.balances[index].amount = (BigInt(src.balances[index].amount) + wad).toString();
-            if (src.balances[index].amount === "0") {
-              src.balances.splice(index, 1);
+            srcAddress.balances[index].amount = (BigInt(srcAddress.balances[index].amount) + wad).toString();
+            if (srcAddress.balances[index].amount === "0") {
+              srcAddress.balances.splice(index, 1);
               token.holders = (BigInt(token.holders!) - 1n).toString();
             }
           }
-          upsertArray(addresses, src);
+          upsertArray(addresses, srcAddress);
           upsertArray(addresses, tokenAddress);
           upsertArray(tokens, token);
-          logger.debug('src :>> ' + src);
+          logger.debug('src :>> ' + srcAddress);
           logger.debug('token :>> ' + token);
         }
         else if (this.flagERC20 && log.topics[0] === erc20AndErc721TokenTransferFirstTopic && log.topics[1] && log.topics[2] && !log.topics[3]) { // ERC20 Transfer
-          const [fromAddress] = decodeAbiParameters(parseAbiParameters('address from'), log.topics[1]);
-          const [toAddress] = decodeAbiParameters(parseAbiParameters('address to'), log.topics[2]);
+          const [from] = decodeAbiParameters(parseAbiParameters('address from'), log.topics[1]);
+          const [to] = decodeAbiParameters(parseAbiParameters('address to'), log.topics[2]);
           const [amount] = decodeAbiParameters(parseAbiParameters('uint256 amount'), log.data);
           logger.debug('log :>> ' + log);
-          logger.debug('fromAddress :>> ' + fromAddress);
-          logger.debug('toAddress :>> ' + toAddress);
+          logger.debug('fromAddress :>> ' + from);
+          logger.debug('toAddress :>> ' + to);
           logger.debug('amount :>> ' + amount);
-          const from = await this.upsertAddress(addresses, fromAddress);
-          const to = await this.upsertAddress(addresses, toAddress);
+          const fromAddress = await this.upsertAddress(addresses, from);
+          const toAddress = await this.upsertAddress(addresses, to);
           const tokenAddress = await this.upsertAddress(addresses, log.address);
           const token = await this.upsertToken(tokens, tokenAddress, "ERC20");
           if (!token) continue;
+          transfers.push(new TransferModel({
+            token,
+            from: fromAddress,
+            to: toAddress,
+            txHash: tx.hash,
+            logIndex: log.logIndex,
+            amount: amount.toString()
+          }));
           const updateBalance = (address: AddressDocument, token: TokenDocument, amount: bigint, isIncrease: boolean) => {
             // deno-lint-ignore no-explicit-any
             const index = address.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash);
@@ -171,80 +204,97 @@ export default class Server {
               }
             }
           }
-          if (from.hash === zeroAddress) {
-            updateBalance(to, token, amount, true);
+          if (fromAddress.hash === zeroAddress) {
+            updateBalance(toAddress, token, amount, true);
             token.totalSupply = (BigInt(token.totalSupply!) + amount).toString();
           }
-          else if (to.hash === zeroAddress) {
-            updateBalance(from, token, amount, false);
+          else if (toAddress.hash === zeroAddress) {
+            updateBalance(fromAddress, token, amount, false);
             token.totalSupply = (BigInt(token.totalSupply!) - amount).toString();
           }
           else {
-            updateBalance(from, token, amount, false);
-            updateBalance(to, token, amount, true);
+            updateBalance(fromAddress, token, amount, false);
+            updateBalance(toAddress, token, amount, true);
           }
-          upsertArray(addresses, from);
-          upsertArray(addresses, to);
+          upsertArray(addresses, fromAddress);
+          upsertArray(addresses, toAddress);
           upsertArray(addresses, tokenAddress);
           upsertArray(tokens, token);
-          logger.debug('from :>> ' + from);
-          logger.debug('to :>> ' + to);
+          logger.debug('from :>> ' + fromAddress);
+          logger.debug('to :>> ' + toAddress);
           logger.debug('amount :>> ' + amount);
           logger.debug('token :>> ' + token);
         }
         else if (this.flagERC721 && log.topics[0] === erc20AndErc721TokenTransferFirstTopic && log.topics[1] && log.topics[2] && log.topics[3]) { // ERC721
-          const [fromAddress] = decodeAbiParameters(parseAbiParameters('address from'), log.topics[1]);
-          const [toAddress] = decodeAbiParameters(parseAbiParameters('address to'), log.topics[2]);
+          const [from] = decodeAbiParameters(parseAbiParameters('address from'), log.topics[1]);
+          const [to] = decodeAbiParameters(parseAbiParameters('address to'), log.topics[2]);
           const [tokenId] = decodeAbiParameters(parseAbiParameters('uint256 tokenId'), log.topics[3]);
           logger.debug('log :>> ' + log);
-          logger.debug('fromAddress :>> ' + fromAddress);
-          logger.debug('toAddress :>> ' + toAddress);
+          logger.debug('fromAddress :>> ' + from);
+          logger.debug('toAddress :>> ' + to);
           logger.debug('tokenId :>> ' + tokenId);
-          const from = await this.upsertAddress(addresses, fromAddress);
-          const to = await this.upsertAddress(addresses, toAddress);
+          const fromAddress = await this.upsertAddress(addresses, from);
+          const toAddress = await this.upsertAddress(addresses, to);
           const tokenAddress = await this.upsertAddress(addresses, log.address);
           const token = await this.upsertToken(tokens, tokenAddress, "ERC721");
           if (!token) continue;
-          if (from.hash === zeroAddress) {
-            from.balances.push({ token, tokenId });
+          transfers.push(new TransferModel({
+            token,
+            from: fromAddress,
+            to: toAddress,
+            txHash: tx.hash,
+            logIndex: log.logIndex,
+            tokenId: tokenId.toString()
+          }));
+          if (fromAddress.hash === zeroAddress) {
+            fromAddress.balances.push({ token, tokenId });
             token.totalSupply = (BigInt(token.totalSupply!) + 1n).toString();
           }
-          else if (to.hash === zeroAddress) {
+          else if (toAddress.hash === zeroAddress) {
             // deno-lint-ignore no-explicit-any
-            const index = to.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash && balance.tokenId === tokenId);
-            to.balances.splice(index, 1);
+            const index = toAddress.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash && balance.tokenId === tokenId);
+            toAddress.balances.splice(index, 1);
             token.totalSupply = (BigInt(token.totalSupply!) - 1n).toString();
           } else {
             // deno-lint-ignore no-explicit-any
-            const index = from.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash && balance.tokenId === tokenId);
-            from.balances.splice(index, 1);
-            to.balances.push({ token, tokenId });
+            const index = fromAddress.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash && balance.tokenId === tokenId);
+            fromAddress.balances.splice(index, 1);
+            toAddress.balances.push({ token, tokenId });
           }
-          upsertArray(addresses, from);
-          upsertArray(addresses, to);
+          upsertArray(addresses, fromAddress);
+          upsertArray(addresses, toAddress);
           upsertArray(addresses, tokenAddress);
           upsertArray(tokens, token);
-          logger.debug('from :>> ' + from);
-          logger.debug('to :>> ' + to);
+          logger.debug('from :>> ' + fromAddress);
+          logger.debug('to :>> ' + toAddress);
           logger.debug('tokenId :>> ' + tokenId);
           logger.debug('token :>> ' + token);
         }
         else if (this.flagERC1155 && log.topics[0] === erc1155SingleTransferFirstTopic && log.topics[1] && log.topics[2] && log.topics[3]) { // ERC1155 Single Transfer
-          const [operatorAddress] = decodeAbiParameters(parseAbiParameters('address operator'), log.topics[1]);
-          const [fromAddress] = decodeAbiParameters(parseAbiParameters('address from'), log.topics[2]);
-          const [toAddress] = decodeAbiParameters(parseAbiParameters('address to'), log.topics[3]);
+          const [operator] = decodeAbiParameters(parseAbiParameters('address operator'), log.topics[1]);
+          const [from] = decodeAbiParameters(parseAbiParameters('address from'), log.topics[2]);
+          const [to] = decodeAbiParameters(parseAbiParameters('address to'), log.topics[3]);
           const [id, value] = decodeAbiParameters(parseAbiParameters('uint256 id, uint256 value'), log.data);
           logger.debug('log :>> ' + log);
-          logger.debug('fromAddress :>> ' + fromAddress);
-          logger.debug('toAddress :>> ' + toAddress);
+          logger.debug('fromAddress :>> ' + from);
+          logger.debug('toAddress :>> ' + to);
           logger.debug('id :>> ' + id);
           logger.debug('value :>> ' + value);
-          await this.upsertAddress(addresses, operatorAddress);
-          const from = await this.upsertAddress(addresses, fromAddress);
-          const to = await this.upsertAddress(addresses, toAddress);
+          const operatorAddress = await this.upsertAddress(addresses, operator);
+          const fromAddress = await this.upsertAddress(addresses, from);
+          const toAddress = await this.upsertAddress(addresses, to);
           const tokenAddress = await this.upsertAddress(addresses, log.address);
           const token = await this.upsertToken(tokens, tokenAddress, "ERC1155");
           if (!token) continue;
+          transfers.push(new TransferModel({
+            token,
+            from: fromAddress,
+            to: toAddress,
+            txHash: tx.hash,
+            logIndex: log.logIndex,
+            tokenId: id.toString(),
+            amount: value.toString()
+          }));
           const updateBalance = (address: AddressDocument, token: TokenDocument, tokenId: bigint, value: bigint, isIncrease: boolean) => {
             // deno-lint-ignore no-explicit-any
             const index = address.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash && balance.tokenId === tokenId);
@@ -264,41 +314,51 @@ export default class Server {
               }
             }
           }
-          if (from.hash === zeroAddress) {
-            updateBalance(to, token, id, value, true);
+          if (fromAddress.hash === zeroAddress) {
+            updateBalance(toAddress, token, id, value, true);
           }
-          else if (to.hash === zeroAddress) {
-            updateBalance(from, token, id, value, false);
+          else if (toAddress.hash === zeroAddress) {
+            updateBalance(fromAddress, token, id, value, false);
           }
           else {
-            updateBalance(from, token, id, value, false);
-            updateBalance(to, token, id, value, true);
+            updateBalance(fromAddress, token, id, value, false);
+            updateBalance(toAddress, token, id, value, true);
           }
-          upsertArray(addresses, from);
-          upsertArray(addresses, to);
+          upsertArray(addresses, operatorAddress);
+          upsertArray(addresses, fromAddress);
+          upsertArray(addresses, toAddress);
           upsertArray(addresses, tokenAddress);
           upsertArray(tokens, token);
-          logger.debug('from :>> ' + from);
-          logger.debug('to :>> ' + to);
+          logger.debug('from :>> ' + fromAddress);
+          logger.debug('to :>> ' + toAddress);
           logger.debug('id :>> ' + id);
           logger.debug('value :>> ' + value);
         }
         else if (this.flagERC1155 && log.topics[0] === erc1155BatchTransferFirstTopic && log.topics[1] && log.topics[2] && log.topics[3]) { // ERC1155 Batch Transfer
           const [operatorAddress] = decodeAbiParameters(parseAbiParameters('address operator'), log.topics[1]);
-          const [fromAddress] = decodeAbiParameters(parseAbiParameters('address from'), log.topics[2]);
-          const [toAddress] = decodeAbiParameters(parseAbiParameters('address to'), log.topics[3]);
+          const [fromAddress1] = decodeAbiParameters(parseAbiParameters('address from'), log.topics[2]);
+          const [toAddress1] = decodeAbiParameters(parseAbiParameters('address to'), log.topics[3]);
           const [ids, values] = decodeAbiParameters(parseAbiParameters('uint256[] ids, uint256[] values'), log.data);
           logger.debug('log :>> ' + log);
-          logger.debug('fromAddress :>> ' + fromAddress);
-          logger.debug('toAddress :>> ' + toAddress);
+          logger.debug('fromAddress :>> ' + fromAddress1);
+          logger.debug('toAddress :>> ' + toAddress1);
           logger.debug('ids :>> ' + ids);
           logger.debug('values :>> ' + values);
           await this.upsertAddress(addresses, operatorAddress);
-          const from = await this.upsertAddress(addresses, fromAddress);
-          const to = await this.upsertAddress(addresses, toAddress);
+          const fromAddress = await this.upsertAddress(addresses, fromAddress1);
+          const toAddress = await this.upsertAddress(addresses, toAddress1);
           const tokenAddress = await this.upsertAddress(addresses, log.address);
           const token = await this.upsertToken(tokens, tokenAddress, "ERC1155");
           if (!token) continue;
+          transfers.concat(ids.map((id, index) => new TransferModel({
+            token,
+            from: fromAddress,
+            to: toAddress,
+            txHash: tx.hash,
+            logIndex: log.logIndex,
+            tokenId: id.toString(),
+            amount: values[index].toString()
+          })));
           const updateBalance = (address: AddressDocument, token: TokenDocument, tokenIds: readonly bigint[], values: readonly bigint[], isIncrease: boolean) => {
             for (let i = 0; i < tokenIds.length; i++) {
               const tokenId = tokenIds[i];
@@ -322,22 +382,22 @@ export default class Server {
               }
             }
           }
-          if (from.hash === zeroAddress) {
-            updateBalance(to, token, ids, values, true);
+          if (fromAddress.hash === zeroAddress) {
+            updateBalance(toAddress, token, ids, values, true);
           }
-          else if (to.hash === zeroAddress) {
-            updateBalance(from, token, ids, values, false);
+          else if (toAddress.hash === zeroAddress) {
+            updateBalance(fromAddress, token, ids, values, false);
           }
           else {
-            updateBalance(from, token, ids, values, false);
-            updateBalance(to, token, ids, values, true);
+            updateBalance(fromAddress, token, ids, values, false);
+            updateBalance(toAddress, token, ids, values, true);
           }
-          upsertArray(addresses, from);
-          upsertArray(addresses, to);
+          upsertArray(addresses, fromAddress);
+          upsertArray(addresses, toAddress);
           upsertArray(addresses, tokenAddress);
           upsertArray(tokens, token);
-          logger.debug('from :>> ' + from);
-          logger.debug('to :>> ' + to);
+          logger.debug('from :>> ' + fromAddress);
+          logger.debug('to :>> ' + toAddress);
           logger.debug('id :>> ' + ids);
           logger.debug('value :>> ' + values);
         }
@@ -345,6 +405,7 @@ export default class Server {
     }
     await AddressModel.bulkSave(addresses);
     await TokenModel.bulkSave(tokens);
+    await TransferModel.insertMany(transfers);
   }
   async upsertAddress(addresses: AddressDocument[], hash: Address) {
     hash = hash.toLowerCase() as Address;

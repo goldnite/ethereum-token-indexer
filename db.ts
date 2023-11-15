@@ -43,29 +43,48 @@ export const TokenSchema = new Schema({
   totalSupply: String
 });
 
+export const TransferSchema = new Schema({
+  token: {
+    type: Schema.Types.ObjectId,
+    ref: 'Token'
+  },
+  from: {
+    type: Schema.Types.ObjectId,
+    ref: 'Address'
+  },
+  to: {
+    type: Schema.Types.ObjectId,
+    ref: 'Address'
+  },
+  txHash: String,
+  logIndex: String,
+  tokenId: String,
+  amount: String,
+});
+
 export const CollectionSchema = new Schema({
   token: {
     type: Schema.Types.ObjectId,
     ref: 'Token'
   },
   tokenId: String,
-  name: String,
-  symbol: String,
   totalSupply: String,
-  description: String,
-  external_url: String,
-  image: String,
-  attributes: [Object]
-})
+});
 
-export const ChainModel = mongoose.model("Chain", ChainSchema,);
+export const ChainModel = mongoose.model("Chain", ChainSchema);
 export const AddressModel = mongoose.model("Address", AddressSchema);
 export const TokenModel = mongoose.model("Token", TokenSchema);
+export const TransferModel = mongoose.model("Transfer", TransferSchema);
+export const CollectionModel = mongoose.model("Collection", CollectionSchema);
 
 export type Chain = InferSchemaType<typeof ChainSchema>;
 export type Address = InferSchemaType<typeof AddressSchema>;
 export type Token = InferSchemaType<typeof TokenSchema>;
+export type Transfer = InferSchemaType<typeof TransferSchema>;
+export type Collection = InferSchemaType<typeof CollectionSchema>;
 
 export type ChainDocument = HydratedDocument<Chain>;
 export type AddressDocument = HydratedDocument<Address>;
 export type TokenDocument = HydratedDocument<Token>;
+export type TransferDocument = HydratedDocument<Transfer>;
+export type CollectionDocument = HydratedDocument<Collection>;

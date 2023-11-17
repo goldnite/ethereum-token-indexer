@@ -68,6 +68,7 @@ export const CollectionSchema = new Schema({
     ref: 'Token'
   },
   tokenId: String,
+  holders: String,
   totalSupply: String,
 });
 
@@ -88,3 +89,9 @@ export type AddressDocument = HydratedDocument<Address>;
 export type TokenDocument = HydratedDocument<Token>;
 export type TransferDocument = HydratedDocument<Transfer>;
 export type CollectionDocument = HydratedDocument<Collection>;
+
+export type Balance = {
+  token: TokenDocument;
+  tokenId?: string,
+  amount?: number
+};

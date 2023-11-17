@@ -23,6 +23,8 @@ import {
   type TokenDocument,
   CollectionDocument,
   TransferDocument,
+  CollectionModel,
+  Balance,
 } from './db.ts';
 import {
   ERC721_interfaceId,
@@ -95,8 +97,8 @@ export default class Server {
     }
     const addresses: AddressDocument[] = [this.zeroAddress];
     const tokens: TokenDocument[] = [];
-    const collections: CollectionDocument[] = [];
     const transfers: TransferDocument[] = [];
+    const collections: CollectionDocument[] = [];
     for (const tx of block.transactions) {
       const txReceipt = await this.client.getTransactionReceipt({ hash: tx.hash });
       for (const log of txReceipt.logs) {
@@ -118,8 +120,7 @@ export default class Server {
             logIndex: log.logIndex,
             amount: wad.toString()
           }));
-          // deno-lint-ignore no-explicit-any
-          const index = dstAddress.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash);
+          const index = dstAddress.balances.findIndex((balance: Balance) => balance.token === token);
           if (index >= 0) dstAddress.balances[index].amount = (BigInt(dstAddress.balances[index].amount) + wad).toString();
           else {
             dstAddress.balances.push({ token, amount: wad.toString() });
@@ -149,10 +150,9 @@ export default class Server {
             logIndex: log.logIndex,
             amount: wad.toString()
           }));
-          // deno-lint-ignore no-explicit-any
-          const index = srcAddress.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash);
+          const index = srcAddress.balances.findIndex((balance: Balance) => balance.token === token);
           if (index >= 0) {
-            srcAddress.balances[index].amount = (BigInt(srcAddress.balances[index].amount) + wad).toString();
+            srcAddress.balances[index].amount = (BigInt(srcAddress.balances[index].amount) - wad).toString();
             if (srcAddress.balances[index].amount === "0") {
               srcAddress.balances.splice(index, 1);
               token.holders = (BigInt(token.holders!) - 1n).toString();
@@ -185,9 +185,8 @@ export default class Server {
             logIndex: log.logIndex,
             amount: amount.toString()
           }));
-          const updateBalance = (address: AddressDocument, token: TokenDocument, amount: bigint, isIncrease: boolean) => {
-            // deno-lint-ignore no-explicit-any
-            const index = address.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash);
+          const updateBalance = (address: AddressDocument, amount: bigint, isIncrease: boolean) => {
+            const index = address.balances.findIndex((balance: Balance) => balance.token === token);
             logger.debug('index :>> ' + index);
             if (isIncrease) {
               if (index >= 0) address.balances[index].amount = (BigInt(address.balances[index].amount) + amount).toString();
@@ -197,7 +196,7 @@ export default class Server {
               }
             }
             else if (index >= 0) {
-              address.balances[index].amount = (BigInt(address.balances[index].amount) + amount).toString();
+              address.balances[index].amount = (BigInt(address.balances[index].amount) - amount).toString();
               if (address.balances[index].amount === "0") {
                 address.balances.splice(index, 1);
                 token.holders = (BigInt(token.holders!) - 1n).toString();
@@ -205,16 +204,16 @@ export default class Server {
             }
           }
           if (fromAddress.hash === zeroAddress) {
-            updateBalance(toAddress, token, amount, true);
+            updateBalance(toAddress, amount, true);
             token.totalSupply = (BigInt(token.totalSupply!) + amount).toString();
           }
           else if (toAddress.hash === zeroAddress) {
-            updateBalance(fromAddress, token, amount, false);
+            updateBalance(fromAddress, amount, false);
             token.totalSupply = (BigInt(token.totalSupply!) - amount).toString();
           }
           else {
-            updateBalance(fromAddress, token, amount, false);
-            updateBalance(toAddress, token, amount, true);
+            updateBalance(fromAddress, amount, false);
+            updateBalance(toAddress, amount, true);
           }
           upsertArray(addresses, fromAddress);
           upsertArray(addresses, toAddress);
@@ -238,6 +237,7 @@ export default class Server {
           const tokenAddress = await this.upsertAddress(addresses, log.address);
           const token = await this.upsertToken(tokens, tokenAddress, "ERC721");
           if (!token) continue;
+          const collection = await this.upsertCollection(collections, token);
           transfers.push(new TransferModel({
             token,
             from: fromAddress,
@@ -248,16 +248,20 @@ export default class Server {
           }));
           if (fromAddress.hash === zeroAddress) {
             fromAddress.balances.push({ token, tokenId });
-            token.totalSupply = (BigInt(token.totalSupply!) + 1n).toString();
+            collection.totalSupply = token.totalSupply = (BigInt(token.totalSupply!) + 1n).toString();
           }
           else if (toAddress.hash === zeroAddress) {
-            // deno-lint-ignore no-explicit-any
-            const index = toAddress.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash && balance.tokenId === tokenId);
+            const index = toAddress.balances.findIndex((balance: Balance) => balance.token === token && balance.tokenId === tokenId.toString());
             toAddress.balances.splice(index, 1);
-            token.totalSupply = (BigInt(token.totalSupply!) - 1n).toString();
+            collection.totalSupply = token.totalSupply = (BigInt(token.totalSupply!) - 1n).toString();
+            if (toAddress.balances.findIndex((balance: Balance) => balance.token === token) < 0) {
+              collection.holders = token.holders = (BigInt(token.holders!) - 1n).toString();
+            }
           } else {
-            // deno-lint-ignore no-explicit-any
-            const index = fromAddress.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash && balance.tokenId === tokenId);
+            if (toAddress.balances.findIndex((balance: Balance) => balance.token === token) < 0) {
+              collection.holders = token.holders = (BigInt(token.holders!) + 1n).toString();
+            }
+            const index = fromAddress.balances.findIndex((balance: Balance) => balance.token === token && balance.tokenId === tokenId.toString());
             fromAddress.balances.splice(index, 1);
             toAddress.balances.push({ token, tokenId });
           }
@@ -265,6 +269,7 @@ export default class Server {
           upsertArray(addresses, toAddress);
           upsertArray(addresses, tokenAddress);
           upsertArray(tokens, token);
+          upsertArray(collections, collection);
           logger.debug('from :>> ' + fromAddress);
           logger.debug('to :>> ' + toAddress);
           logger.debug('tokenId :>> ' + tokenId);
@@ -286,6 +291,7 @@ export default class Server {
           const tokenAddress = await this.upsertAddress(addresses, log.address);
           const token = await this.upsertToken(tokens, tokenAddress, "ERC1155");
           if (!token) continue;
+          const collection = await this.upsertCollection(collections, token, id.toString());
           transfers.push(new TransferModel({
             token,
             from: fromAddress,
@@ -295,40 +301,46 @@ export default class Server {
             tokenId: id.toString(),
             amount: value.toString()
           }));
-          const updateBalance = (address: AddressDocument, token: TokenDocument, tokenId: bigint, value: bigint, isIncrease: boolean) => {
-            // deno-lint-ignore no-explicit-any
-            const index = address.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash && balance.tokenId === tokenId);
+          const updateBalance = (address: AddressDocument, tokenId: bigint, value: bigint, isIncrease: boolean) => {
+            const index = address.balances.findIndex((balance: Balance) => balance.token === token && balance.tokenId === tokenId.toString());
             logger.debug('index :>> ' + index);
             if (isIncrease) {
               if (index >= 0) address.balances[index].amount = (BigInt(address.balances[index].amount) + value).toString();
               else {
                 address.balances.push({ token, tokenId, amount: value.toString() });
                 token.holders = (BigInt(token.holders!) + 1n).toString();
+                collection.holders = (BigInt(collection.holders!) + 1n).toString();
               }
+              token.totalSupply = (BigInt(token.totalSupply!) + value).toString();
+              collection.totalSupply = (BigInt(collection.totalSupply!) + value).toString();
             }
             else if (index >= 0) {
-              address.balances[index].amount = (BigInt(address.balances[index].amount) + value).toString();
+              address.balances[index].amount = (BigInt(address.balances[index].amount) - value).toString();
               if (address.balances[index].amount === "0") {
                 address.balances.splice(index, 1);
                 token.holders = (BigInt(token.holders!) - 1n).toString();
+                collection.holders = (BigInt(collection.holders!) - 1n).toString();
               }
+              token.totalSupply = (BigInt(token.totalSupply!) - value).toString();
+              collection.totalSupply = (BigInt(collection.totalSupply!) - value).toString();
             }
           }
           if (fromAddress.hash === zeroAddress) {
-            updateBalance(toAddress, token, id, value, true);
+            updateBalance(toAddress, id, value, true);
           }
           else if (toAddress.hash === zeroAddress) {
-            updateBalance(fromAddress, token, id, value, false);
+            updateBalance(fromAddress, id, value, false);
           }
           else {
-            updateBalance(fromAddress, token, id, value, false);
-            updateBalance(toAddress, token, id, value, true);
+            updateBalance(fromAddress, id, value, false);
+            updateBalance(toAddress, id, value, true);
           }
           upsertArray(addresses, operatorAddress);
           upsertArray(addresses, fromAddress);
           upsertArray(addresses, toAddress);
           upsertArray(addresses, tokenAddress);
           upsertArray(tokens, token);
+          upsertArray(collections, collection);
           logger.debug('from :>> ' + fromAddress);
           logger.debug('to :>> ' + toAddress);
           logger.debug('id :>> ' + id);
@@ -359,38 +371,44 @@ export default class Server {
             tokenId: id.toString(),
             amount: values[index].toString()
           })));
-          const updateBalance = (address: AddressDocument, token: TokenDocument, tokenIds: readonly bigint[], values: readonly bigint[], isIncrease: boolean) => {
+          const updateBalance = async (address: AddressDocument, tokenIds: readonly bigint[], values: readonly bigint[], isIncrease: boolean) => {
             for (let i = 0; i < tokenIds.length; i++) {
               const tokenId = tokenIds[i];
               const value = values[i];
-              // deno-lint-ignore no-explicit-any
-              const index = address.balances.findIndex((balance: any) => balance.token.address.hash === token.address.hash && balance.tokenId === tokenId);
+              const collection = await this.upsertCollection(collections, token, tokenId.toString());
+              const index = address.balances.findIndex((balance: Balance) => balance.token === token && balance.tokenId === tokenId.toString());
               logger.debug('index :>> ' + index);
               if (isIncrease) {
                 if (index >= 0) address.balances[index].amount = (BigInt(address.balances[index].amount) + value).toString();
                 else {
                   address.balances.push({ token, tokenId, amount: value.toString() });
                   token.holders = (BigInt(token.holders!) + 1n).toString();
+                  collection.holders = (BigInt(collection.holders!) + 1n).toString();
                 }
+                token.totalSupply = (BigInt(token.totalSupply!) + value).toString();
+                collection.totalSupply = (BigInt(collection.totalSupply!) + value).toString();
               }
               else if (index >= 0) {
-                address.balances[index].amount = (BigInt(address.balances[index].amount) + value).toString();
+                address.balances[index].amount = (BigInt(address.balances[index].amount) - value).toString();
                 if (address.balances[index].amount === "0") {
                   address.balances.splice(index, 1);
                   token.holders = (BigInt(token.holders!) - 1n).toString();
+                  collection.holders = (BigInt(collection.holders!) - 1n).toString();
                 }
+                token.totalSupply = (BigInt(token.totalSupply!) - value).toString();
+                collection.totalSupply = (BigInt(collection.totalSupply!) - value).toString();
               }
             }
           }
           if (fromAddress.hash === zeroAddress) {
-            updateBalance(toAddress, token, ids, values, true);
+            await updateBalance(toAddress, ids, values, true);
           }
           else if (toAddress.hash === zeroAddress) {
-            updateBalance(fromAddress, token, ids, values, false);
+            await updateBalance(fromAddress, ids, values, false);
           }
           else {
-            updateBalance(fromAddress, token, ids, values, false);
-            updateBalance(toAddress, token, ids, values, true);
+            await updateBalance(fromAddress, ids, values, false);
+            await updateBalance(toAddress, ids, values, true);
           }
           upsertArray(addresses, fromAddress);
           upsertArray(addresses, toAddress);
@@ -429,30 +447,30 @@ export default class Server {
     }
     return address;
   }
-  async upsertToken(tokens: TokenDocument[], tokenAddress: AddressDocument, tokenType: string) {
-    const index = tokens.findIndex((element: TokenDocument) => element.address.hash === tokenAddress.hash);
+  async upsertToken(tokens: TokenDocument[], address: AddressDocument, tokenType: string) {
+    const index = tokens.findIndex((element: TokenDocument) => element.address.hash === address.hash);
     if (index >= 0) return tokens[index];
-    let token = await TokenModel.findOne({ address: tokenAddress }).populate("address").exec();
+    let token = await TokenModel.findOne({ address }).populate("address").exec();
     if (!token) {
       const data = await this.client.multicall({
         contracts: [
           {
-            address: tokenAddress.hash as Address,
+            address: address.hash as Address,
             abi: ERC721Abi as Abi,
             args: [ERC721_interfaceId],
             functionName: 'supportsInterface',
           }, {
-            address: tokenAddress.hash as Address,
+            address: address.hash as Address,
             abi: ERC1155Abi as Abi,
             args: [ERC1155_interfaceId],
             functionName: 'supportsInterface',
           },
           {
-            address: tokenAddress.hash as Address,
+            address: address.hash as Address,
             abi: ERC20Abi as Abi,
             functionName: 'name',
           }, {
-            address: tokenAddress.hash as Address,
+            address: address.hash as Address,
             abi: ERC20Abi as Abi,
             functionName: 'symbol',
           }
@@ -468,7 +486,7 @@ export default class Server {
         case 'ERC20':
           token = new TokenModel({
             type: tokenType,
-            address: tokenAddress,
+            address: address,
             holders: "0",
             name: metadata.name,
             symbol: metadata.symbol,
@@ -480,7 +498,7 @@ export default class Server {
           if (isERC721)
             token = new TokenModel({
               type: tokenType,
-              address: tokenAddress,
+              address: address,
               holders: "0",
               name: metadata.name,
               symbol: metadata.symbol,
@@ -492,7 +510,7 @@ export default class Server {
           if (isERC1155)
             token = new TokenModel({
               type: tokenType,
-              address: tokenAddress,
+              address: address,
               holders: "0",
               totalSupply: "0",
               chain: this.chain,
@@ -503,5 +521,19 @@ export default class Server {
       }
     }
     return token;
+  }
+  async upsertCollection(collections: CollectionDocument[], token: TokenDocument, tokenId?: string) {
+    const index = collections.findIndex((element: CollectionDocument) => element.token.address.hash === token.address.hash && element.tokenId === tokenId);
+    if (index >= 0) return collections[index];
+    let collection = await CollectionModel.findOne({ token, tokenId }).populate("token").exec();
+    if (!collection) {
+      collection = new CollectionModel({
+        token,
+        tokenId,
+        holders: "0",
+        totalSupply: "0"
+      });
+    }
+    return collection;
   }
 }
